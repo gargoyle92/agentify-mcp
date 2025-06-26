@@ -78,6 +78,32 @@ export class AgentifyMCPServer {
         const clientType = this.detectClientType(request.params);
         this.logger.debug(`Detected client type: ${clientType}`);
 
+        // 초기화 시 클라이언트 등록
+        const client: AgentClient = {
+          id: `session_${Date.now()}`,
+          type: clientType,
+          name: request.params.clientInfo?.name || 'Unknown Client',
+          version: request.params.clientInfo?.version || '1.0.0',
+          capabilities: [],
+          connectionInfo: {
+            connectedAt: new Date(),
+            lastActivity: new Date(),
+            transport: 'stdio',
+          },
+          status: AgentStatus.CONNECTED,
+          context: {
+            workingDirectory: process.cwd(),
+          },
+          metrics: {
+            requestCount: 0,
+            errorCount: 0,
+            uptime: 0,
+          },
+        };
+
+        this.sessionManager.registerClient(client);
+        this.logger.debug(`Client registered: ${client.id}`);
+
         return {
           protocolVersion: request.params.protocolVersion,
           capabilities: {
