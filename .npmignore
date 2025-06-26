@@ -1,0 +1,65 @@
+# Source files
+src/
+tsconfig.json
+.prettierrc
+.prettierignore
+eslint.config.js
+
+# Development files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test files
+test/
+tests/
+__tests__/
+*.test.js
+*.test.ts
+*.spec.js
+*.spec.ts
+
+# Development dependencies
+node_modules/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Git files
+.git/
+.gitignore
+
+# CI/CD files
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Development scripts
+test-client.js
+
+# Build artifacts that we don't want
+*.tsbuildinfo
+
+# Keep these files
+!dist/
+!README.md
+!LICENSE
+!package.json
+!example-config.json 
+CLAUDE.md
+.cursor
+.claude

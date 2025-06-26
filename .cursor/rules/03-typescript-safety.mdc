@@ -1,0 +1,203 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 03-TypeScript-Safety
+
+## Type System Configuration
+The project uses strict TypeScript configuration in [tsconfig.json](mdc:tsconfig.json) with ESNext modules and strict type checking.
+
+### Central Type Definitions
+All types are centrally defined in [types/index.ts](mdc:src/types/index.ts) and must be imported from there.
+
+## CRITICAL TYPE SAFETY RULES - MUST FOLLOW
+
+### ✅ ALWAYS DO:
+1. **Import from central types**: `import { AgentClient, AgentStatus } from '../types/index.js'`
+2. **Use strict type annotations**: Define return types for all public methods
+3. **Validate enum usage**: Always use enum values, never string literals
+4. **Type guard functions**: Implement type guards for runtime type checking
+5. **Generic constraints**: Use proper generic constraints for extensibility
+
+### ❌ NEVER DO:
+1. **Use `any` type**: Avoid `any` - use `unknown` or proper types instead
+2. **Skip type annotations**: Never omit return types on public methods
+3. **String literal enums**: Use enum values like `AgentStatus.CONNECTED`, not `'connected'`
+4. **Bypass type checking**: Never use `as any` or `@ts-ignore` without justification
+5. **Ignore nullable types**: Always handle undefined/null cases explicitly
+
+## Enum Usage Standards
+
+### ✅ CORRECT Enum Usage:
+```typescript
+// Import from central types
+import { AgentClientType, AgentStatus } from '../types/index.js';
+
+// Use enum values
+client.status = AgentStatus.CONNECTED;
+if (client.type === AgentClientType.CLAUDE_CODE) { ... }
+
+// Type-safe enum iteration
+Object.values(AgentClientType).forEach(type => { ... });
+```
+
+### ❌ INCORRECT Enum Usage:
+```typescript
+// Bad - string literals
+client.status = 'connected';
+if (client.type === 'claude-code') { ... }
+
+// Bad - hardcoded values
+const types = ['claude-code', 'gemini-cli'];
+```
+
+## Interface Implementation Standards
+
+### Required Interface Patterns:
+```typescript
+// Tool definitions must implement ToolDefinition
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  inputSchema: {
+    type: string;
+    properties: Record<string, any>;
+    required?: string[];
+  };
+  clientTypes?: AgentClientType[];
+  handler: (args: any, client: AgentClient) => Promise<any>;
+}
+
+// Resource definitions must implement ResourceDefinition  
+export interface ResourceDefinition {
+  uri: string;
+  name: string;
+  description: string;
+  mimeType: string;
+  clientTypes?: AgentClientType[];
+  handler: (client: AgentClient) => Promise<any>;
+}
+```
+
+## Generic Type Constraints
+
+### ✅ PROPER Generic Usage:
+```typescript
+// Constrain generic types properly
+class Registry<T extends { name: string }> {
+  private items: Map<string, T> = new Map();
+  
+  register(item: T): void {
+    this.items.set(item.name, item);
+  }
+}
+
+// Use bounded generics for type safety
+public getAvailableItems<T extends ToolDefinition | ResourceDefinition>(
+  clientType?: AgentClientType
+): T[] { ... }
+```
+
+### ❌ INCORRECT Generic Usage:
+```typescript
+// Bad - unconstrained generics
+class Registry<T> {
+  register(item: T): void { ... } // No type safety
+}
+
+// Bad - any usage
+public getItems(): any[] { ... }
+```
+
+## Type Guard Implementation
+
+### ✅ REQUIRED Type Guards:
+```typescript
+// Client type validation
+export function isValidClientType(type: string): type is AgentClientType {
+  return Object.values(AgentClientType).includes(type as AgentClientType);
+}
+
+// Status validation
+export function isValidStatus(status: string): status is AgentStatus {
+  return Object.values(AgentStatus).includes(status as AgentStatus);
+}
+
+// Usage in code
+if (isValidClientType(userInput)) {
+  // userInput is now typed as AgentClientType
+  this.sessionManager.updateClientType(clientId, userInput);
+}
+```
+
+## Error Type Safety
+
+### ✅ PROPER Error Handling:
+```typescript
+// Define specific error types
+export class ClientNotFoundError extends Error {
+  constructor(clientId: string) {
+    super(`Client not found: ${clientId}`);
+    this.name = 'ClientNotFoundError';
+  }
+}
+
+// Use in implementation
+public getClient(clientId: string): AgentClient {
+  const client = this.clients.get(clientId);
+  if (!client) {
+    throw new ClientNotFoundError(clientId);
+  }
+  return client;
+}
+```
+
+### ❌ AVOID These Patterns:
+```typescript
+// Bad - generic errors without types
+throw new Error('Something went wrong');
+
+// Bad - any error handling
+catch (error: any) { ... }
+
+// Good - specific error types
+catch (error: unknown) {
+  if (error instanceof ClientNotFoundError) { ... }
+}
+```
+
+## Async/Promise Type Safety
+
+### ✅ CORRECT Async Patterns:
+```typescript
+// Always type Promise returns
+public async executeTool(
+  name: string, 
+  args: any, 
+  client: AgentClient
+): Promise<ToolResponse> {
+  // Implementation
+}
+
+// Handle Promise rejections properly
+public async handleRequest(): Promise<void> {
+  try {
+    await this.processRequest();
+  } catch (error: unknown) {
+    this.handleError(error);
+  }
+}
+```
+
+### ❌ INCORRECT Async Patterns:
+```typescript
+// Bad - untyped Promise
+public async executeTool(name, args, client) { ... }
+
+// Bad - unhandled Promise
+this.processRequest(); // Should await or handle
+
+// Bad - any error handling
+catch (error: any) { ... }
+```

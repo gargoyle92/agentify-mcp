@@ -1,0 +1,55 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# 01-Architecture-Overview
+
+## Project Structure
+The main entry point is [index.ts](mdc:src/index.ts), which initializes the [AgentifyMCPServer](mdc:src/server/agentify-mcp.ts).
+
+### Core Components Architecture
+```
+src/
+├── server/               # Core server modules
+│   ├── agentify-mcp.ts  # Main MCP server implementation
+│   ├── session-manager.ts      # Client session management
+│   └── state-tracker.ts        # File system & state monitoring
+├── tools/                # MCP tool implementations
+│   └── tool-registry.ts        # Tool registration & execution
+├── resources/            # MCP resource implementations
+│   └── resource-manager.ts     # Resource management & serving
+├── types/                # TypeScript type definitions
+│   └── index.ts               # Central type exports
+└── utils/                # Utility modules
+    ├── logger.ts             # Logging system
+    └── notification-manager.ts # Alert & notification system
+```
+
+## CRITICAL RULES - MUST FOLLOW
+
+### ✅ ALWAYS DO:
+1. **Import from central types**: Always import types from [types/index.ts](mdc:src/types/index.ts)
+2. **Use dependency injection**: Pass Logger instance to all modules that need logging
+3. **Follow EventEmitter pattern**: All core classes extend EventEmitter for loose coupling
+4. **Implement proper error handling**: Use try-catch blocks and emit error events
+5. **Validate client types**: Always check AgentClientType before executing client-specific logic
+
+### ❌ NEVER DO:
+1. **Direct console.log**: Always use the Logger instance - never use console.log/error directly
+2. **Hardcode client detection**: Use the detectClientType method in AgentifyMCPServer
+3. **Skip error handling**: Every async operation must have proper error handling
+4. **Bypass session manager**: Always use SessionManager for client operations
+5. **Create circular dependencies**: Keep clear separation between server, tools, and resources
+
+## Design Patterns Applied
+- **Observer Pattern**: EventEmitter-based communication
+- **Registry Pattern**: Tool and Resource registries for extensibility
+- **Dependency Injection**: Logger and manager instances passed to constructors
+- **Strategy Pattern**: Client-type specific tool and resource handling
+
+## Extension Points
+- Add new client types in [types/index.ts](mdc:src/types/index.ts) AgentClientType enum
+- Register new tools in [tool-registry.ts](mdc:src/tools/tool-registry.ts)
+- Register new resources in [resource-manager.ts](mdc:src/resources/resource-manager.ts)
+- Add notification channels in [notification-manager.ts](mdc:src/utils/notification-manager.ts)

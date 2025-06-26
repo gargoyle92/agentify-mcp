@@ -1,0 +1,221 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 04-Error-Handling-Logging
+
+## Logging System Architecture
+The project uses a centralized logging system implemented in [logger.ts](mdc:src/utils/logger.ts) with configurable log levels.
+
+### Logger Integration
+All classes receive a Logger instance via dependency injection and must use it for all logging operations.
+
+## CRITICAL LOGGING RULES - MUST FOLLOW
+
+### ✅ ALWAYS DO:
+1. **Use Logger instance**: Never use console.log - always use the injected Logger
+2. **Appropriate log levels**: Use error/warn/info/debug according to severity
+3. **Structured logging**: Include relevant context (clientId, operation, etc.)
+4. **Log before errors**: Log context before throwing exceptions
+5. **Event emission**: Emit events for error conditions to enable monitoring
+
+### ❌ NEVER DO:
+1. **Direct console output**: Never use console.log, console.error, etc.
+2. **Silent failures**: Never catch errors without logging them
+3. **Expose sensitive data**: Don't log passwords, tokens, or sensitive information
+4. **Generic error messages**: Avoid vague messages like "Error occurred"
+5. **Log flooding**: Don't log inside tight loops without throttling
+
+## Error Handling Patterns
+
+### ✅ PROPER Error Handling:
+```typescript
+// Class with proper logging setup
+export class SessionManager extends EventEmitter {
+  constructor(private logger: Logger) {
+    super();
+  }
+
+  public registerClient(client: AgentClient): void {
+    try {
+      this.logger.info(`Registering client: ${client.id} (${client.type})`);
+      this.clients.set(client.id, client);
+      this.emit('clientConnected', client);
+      this.logger.info(`Client registered successfully: ${client.id}`);
+    } catch (error: unknown) {
+      this.logger.error(`Failed to register client ${client.id}:`, error);
+      this.emit('error', { operation: 'registerClient', clientId: client.id, error });
+      throw error;
+    }
+  }
+}
+```
+
+### ❌ INCORRECT Patterns:
+```typescript
+// Bad - no logging
+public registerClient(client: AgentClient): void {
+  this.clients.set(client.id, client); // Silent operation
+}
+
+// Bad - console usage
+public registerClient(client: AgentClient): void {
+  console.log('Registering client:', client.id); // Wrong logging method
+}
+
+// Bad - swallowing errors
+public registerClient(client: AgentClient): void {
+  try {
+    this.clients.set(client.id, client);
+  } catch (error) {
+    // Silent failure - very bad!
+  }
+}
+```
+
+## Log Level Guidelines
+
+### Error Level - `logger.error()`
+- **When**: Unrecoverable errors, exceptions, system failures
+- **Include**: Error object, operation context, affected resources
+- **Example**: `this.logger.error('Failed to connect to MCP client:', error);`
+
+### Warning Level - `logger.warn()`
+- **When**: Recoverable issues, deprecation notices, configuration problems
+- **Include**: Warning condition, potential impact, suggested action
+- **Example**: `this.logger.warn('Client inactive for 5 minutes:', clientId);`
+
+### Info Level - `logger.info()`
+- **When**: Important business events, startup/shutdown, major state changes
+- **Include**: Event description, relevant IDs, timing information
+- **Example**: `this.logger.info('MCP server started on port:', this.config.port);`
+
+### Debug Level - `logger.debug()`
+- **When**: Development debugging, detailed flow information, performance data
+- **Include**: Detailed context, variable values, execution flow
+- **Example**: `this.logger.debug('Processing tool request:', { name, clientId, args });`
+
+## Async Error Handling
+
+### ✅ CORRECT Async Patterns:
+```typescript
+// Proper async error handling with logging
+public async executeTool(
+  name: string, 
+  args: any, 
+  client: AgentClient
+): Promise<ToolResponse> {
+  this.logger.debug(`Executing tool: ${name} for client: ${client.id}`);
+  
+  try {
+    const tool = this.tools.get(name);
+    if (!tool) {
+      const error = new Error(`Tool not found: ${name}`);
+      this.logger.error('Tool execution failed - tool not found:', { name, clientId: client.id });
+      throw error;
+    }
+
+    this.logger.debug(`Tool found, validating client type: ${client.type}`);
+    if (tool.clientTypes && !tool.clientTypes.includes(client.type)) {
+      const error = new Error(`Tool ${name} not available for client type ${client.type}`);
+      this.logger.warn('Tool execution blocked - incompatible client type:', { 
+        name, 
+        clientType: client.type, 
+        supportedTypes: tool.clientTypes 
+      });
+      throw error;
+    }
+
+    const result = await tool.handler(args, client);
+    this.logger.info(`Tool executed successfully: ${name}`, { clientId: client.id });
+    return result;
+
+  } catch (error: unknown) {
+    this.logger.error(`Tool execution failed: ${name}`, { 
+      clientId: client.id, 
+      args, 
+      error 
+    });
+    this.emit('toolError', { name, client, args, error });
+    throw error;
+  }
+}
+```
+
+## Event-Based Error Propagation
+
+### ✅ REQUIRED Event Emissions:
+```typescript
+// Always emit events for monitoring
+export class StateTracker extends EventEmitter {
+  private handleFileChange(clientId: string, event: string, filePath: string): void {
+    try {
+      this.emit('fileChanged', { clientId, event, filePath, timestamp: new Date() });
+      this.logger.debug(`File ${event}: ${filePath} (client: ${clientId})`);
+    } catch (error: unknown) {
+      this.logger.error('File change handling failed:', { clientId, event, filePath, error });
+      this.emit('error', { operation: 'handleFileChange', clientId, error });
+    }
+  }
+}
+```
+
+## Configuration-Based Logging
+
+### ✅ PROPER Configuration Usage:
+```typescript
+// Use config from ServerConfig
+export class AgentifyMCPServer {
+  constructor(config: ServerConfig) {
+    this.logger = new Logger(config.monitoring.logLevel);
+    this.logger.info(`Logger initialized with level: ${config.monitoring.logLevel}`);
+  }
+}
+```
+
+## Sensitive Data Protection
+
+### ✅ SAFE Logging Practices:
+```typescript
+// Good - log structure without sensitive data
+this.logger.info('Client authentication successful', { 
+  clientId: client.id, 
+  clientType: client.type,
+  hasToken: !!client.authToken  // Boolean instead of actual token
+});
+
+// Good - sanitize before logging
+const sanitizedConfig = { 
+  ...config, 
+  apiKeys: config.apiKeys?.map(() => '[REDACTED]') 
+};
+this.logger.debug('Server configuration loaded:', sanitizedConfig);
+```
+
+### ❌ DANGEROUS Logging:
+```typescript
+// Bad - exposes sensitive data
+this.logger.info('Client config:', client.authToken); // Never log tokens!
+this.logger.debug('Full config:', config); // May contain sensitive data
+```
+
+## Error Context Standards
+
+### Required Error Context:
+- **Operation**: What was being attempted
+- **Resource**: What resource was involved (clientId, toolName, etc.)
+- **Input**: Relevant input parameters (sanitized)
+- **State**: Current system state when error occurred
+- **Timestamp**: Automatic via Logger implementation
+
+### Example Context Structure:
+```typescript
+this.logger.error('Operation failed', {
+  operation: 'registerClient',
+  clientId: client.id,
+  clientType: client.type,
+  activeClients: this.getActiveClients().length,
+  error: error
+});
+```

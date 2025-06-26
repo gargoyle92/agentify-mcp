@@ -1,0 +1,110 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# 02-MCP-Protocol-Standards
+
+## MCP Protocol Implementation
+This project implements the Model Context Protocol (MCP) using [@modelcontextprotocol/sdk](mdc:package.json).
+
+### Core MCP Components
+- **Server**: [agentify-mcp.ts](mdc:src/server/agentify-mcp.ts) implements the main MCP server
+- **Tools**: [tool-registry.ts](mdc:src/tools/tool-registry.ts) manages MCP tool implementations
+- **Resources**: [resource-manager.ts](mdc:src/resources/resource-manager.ts) handles MCP resource serving
+
+## CRITICAL MCP RULES - MUST FOLLOW
+
+### ✅ ALWAYS DO:
+1. **Use proper schemas**: All tool definitions MUST use proper inputSchema with type, properties, and required fields
+2. **Validate tool arguments**: Always validate incoming tool arguments against the schema
+3. **Return proper response format**: Tools must return objects that match MCP response expectations
+4. **Handle client detection**: Use AgentClientType to provide client-specific tools and resources
+5. **Implement proper URI schemes**: Resources must use `agentify://` URI scheme consistently
+
+### ❌ NEVER DO:
+1. **Skip input validation**: Never execute tools without validating input parameters
+2. **Return raw strings for complex data**: Use structured objects, not plain strings for tool responses
+3. **Hardcode resource URIs**: Always use the established `agentify://` URI pattern
+4. **Ignore client context**: Never provide tools/resources without checking client type compatibility
+5. **Break MCP schema compliance**: All responses must conform to MCP protocol specifications
+
+## Tool Implementation Standards
+
+### Required Tool Structure:
+```typescript
+{
+  name: string;                    // kebab-case naming
+  description: string;             // Clear, actionable description
+  inputSchema: {
+    type: 'object';
+    properties: Record<string, any>; // Detailed parameter definitions
+    required?: string[];             // List required parameters
+  };
+  clientTypes?: AgentClientType[];   // Specify compatible clients
+  handler: (args: any, client: AgentClient) => Promise<any>;
+}
+```
+
+### Tool Naming Convention:
+- Use **kebab-case**: `get-agent-status`, `pause-agent`
+- Be **action-oriented**: Start with verbs (get, set, pause, resume, update)
+- Be **specific**: Avoid generic names like `status` - use `get-agent-status`
+
+## Resource Implementation Standards
+
+### Required Resource Structure:
+```typescript
+{
+  uri: string;                     // agentify:// scheme required
+  name: string;                    // Human-readable name
+  description: string;             // Clear description of content
+  mimeType: string;               // Proper MIME type
+  clientTypes?: AgentClientType[]; // Client compatibility
+  handler: (client: AgentClient) => Promise<any>;
+}
+```
+
+### Resource URI Patterns:
+- **Common**: `agentify://logs/combined`, `agentify://config/agents`
+- **Client-specific**: `agentify://claude/code-changes`, `agentify://gemini/task-history`
+- **Reports**: `agentify://reports/performance`
+
+## Error Handling Standards
+
+### ✅ PROPER Error Responses:
+```typescript
+// Tool errors
+throw new Error('Client not found: ${clientId}');
+
+// Resource errors  
+throw new Error('Resource not available for client type: ${clientType}');
+```
+
+### ❌ AVOID These Patterns:
+```typescript
+// Bad - generic errors
+throw new Error('Error');
+
+// Bad - exposing internal details
+throw new Error('Database connection failed at line 123');
+```
+
+## Client Type Validation
+
+### ✅ CORRECT Implementation:
+```typescript
+// Check client type before tool execution
+if (tool.clientTypes && !tool.clientTypes.includes(client.type)) {
+  throw new Error(`Tool ${name} not available for client type ${client.type}`);
+}
+```
+
+### ❌ INCORRECT Implementation:
+```typescript
+// Bad - no validation
+const result = await tool.handler(args, client);
+
+// Bad - hardcoded checks
+if (client.type === 'claude-code') { ... }
+```

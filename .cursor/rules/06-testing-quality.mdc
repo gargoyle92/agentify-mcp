@@ -1,0 +1,370 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 06-Testing-Quality
+
+## Testing Framework Configuration
+The project uses Jest for testing as configured in [package.json](mdc:package.json) with TypeScript support via tsx.
+
+### Testing Structure
+```
+src/
+├── __tests__/           # Test files (to be created)
+│   ├── server/
+│   ├── tools/
+│   ├── resources/
+│   └── utils/
+└── __mocks__/           # Mock implementations
+```
+
+## CRITICAL TESTING RULES - MUST FOLLOW
+
+### ✅ ALWAYS DO:
+1. **Test all public methods**: Every public method must have corresponding tests
+2. **Mock external dependencies**: Mock file system, network calls, and external APIs
+3. **Test error conditions**: Test both success and failure scenarios
+4. **Validate MCP compliance**: Test that tools and resources conform to MCP protocol
+5. **Use descriptive test names**: Test names should clearly describe the scenario
+
+### ❌ NEVER DO:
+1. **Skip error testing**: Never test only happy path scenarios
+2. **Test implementation details**: Test behavior, not internal implementation
+3. **Use real file system**: Always mock chokidar and fs operations
+4. **Ignore async behavior**: Always properly handle Promise assertions
+5. **Share test state**: Each test must be independent and isolated
+
+## Unit Testing Patterns
+
+### ✅ PROPER Test Structure:
+```typescript
+// src/__tests__/server/session-manager.test.ts
+import { SessionManager } from '../../server/session-manager.js';
+import { Logger } from '../../utils/logger.js';
+import { AgentClient, AgentClientType, AgentStatus } from '../../types/index.js';
+
+describe('SessionManager', () => {
+  let sessionManager: SessionManager;
+  let mockLogger: jest.Mocked<Logger>;
+
+  beforeEach(() => {
+    mockLogger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+      debug: jest.fn(),
+    } as jest.Mocked<Logger>;
+    
+    sessionManager = new SessionManager(mockLogger);
+  });
+
+  describe('registerClient', () => {
+    it('should register a valid client and emit clientConnected event', () => {
+      // Arrange
+      const mockClient: AgentClient = createMockClient({
+        id: 'test-client',
+        type: AgentClientType.CLAUDE_CODE,
+        name: 'Test Client',
+      });
+      
+      const eventSpy = jest.spyOn(sessionManager, 'emit');
+
+      // Act
+      sessionManager.registerClient(mockClient);
+
+      // Assert
+      expect(sessionManager.getClient('test-client')).toBeDefined();
+      expect(eventSpy).toHaveBeenCalledWith('clientConnected', mockClient);
+      expect(mockLogger.info).toHaveBeenCalledWith('Client registered: test-client (claude-code)');
+    });
+
+    it('should throw error when registering client with missing required fields', () => {
+      // Arrange
+      const invalidClient = { id: '', type: AgentClientType.CLAUDE_CODE } as AgentClient;
+
+      // Act & Assert
+      expect(() => sessionManager.registerClient(invalidClient))
+        .toThrow('Invalid client: missing required fields');
+    });
+  });
+
+  describe('updateClientStatus', () => {
+    it('should update client status and emit statusChanged event', () => {
+      // Arrange
+      const mockClient = createMockClient({ id: 'test-client' });
+      sessionManager.registerClient(mockClient);
+      const eventSpy = jest.spyOn(sessionManager, 'emit');
+
+      // Act
+      sessionManager.updateClientStatus('test-client', AgentStatus.RUNNING);
+
+      // Assert
+      const updatedClient = sessionManager.getClient('test-client');
+      expect(updatedClient?.status).toBe(AgentStatus.RUNNING);
+      expect(eventSpy).toHaveBeenCalledWith('clientStatusChanged', expect.objectContaining({
+        client: updatedClient,
+        oldStatus: AgentStatus.CONNECTED,
+        newStatus: AgentStatus.RUNNING,
+      }));
+    });
+  });
+});
+
+// Test helper functions
+function createMockClient(overrides: Partial<AgentClient> = {}): AgentClient {
+  return {
+    id: 'default-client',
+    type: AgentClientType.CUSTOM,
+    name: 'Default Client',
+    version: '1.0.0',
+    capabilities: [],
+    connectionInfo: {
+      connectedAt: new Date(),
+      lastActivity: new Date(),
+      transport: 'stdio',
+    },
+    status: AgentStatus.CONNECTED,
+    context: {
+      workingDirectory: '/test',
+    },
+    metrics: {
+      requestCount: 0,
+      errorCount: 0,
+      uptime: 0,
+    },
+    ...overrides,
+  };
+}
+```
+
+## MCP Protocol Testing
+
+### ✅ REQUIRED MCP Tests:
+```typescript
+// src/__tests__/tools/tool-registry.test.ts
+import { ToolRegistry } from '../../tools/tool-registry.js';
+import { SessionManager } from '../../server/session-manager.js';
+import { StateTracker } from '../../server/state-tracker.js';
+import { AgentClientType } from '../../types/index.js';
+
+describe('ToolRegistry MCP Compliance', () => {
+  let toolRegistry: ToolRegistry;
+  let mockSessionManager: jest.Mocked<SessionManager>;
+  let mockStateTracker: jest.Mocked<StateTracker>;
+
+  beforeEach(() => {
+    // Setup mocks
+    mockSessionManager = createMockSessionManager();
+    mockStateTracker = createMockStateTracker();
+    toolRegistry = new ToolRegistry(mockSessionManager, mockStateTracker, mockLogger);
+  });
+
+  describe('getAvailableTools', () => {
+    it('should return tools in correct MCP format', () => {
+      // Act
+      const tools = toolRegistry.getAvailableTools();
+
+      // Assert
+      tools.forEach(tool => {
+        expect(tool).toHaveProperty('name');
+        expect(tool).toHaveProperty('description');
+        expect(tool).toHaveProperty('inputSchema');
+        expect(tool.inputSchema).toHaveProperty('type', 'object');
+        expect(tool.inputSchema).toHaveProperty('properties');
+      });
+    });
+
+    it('should filter tools by client type', () => {
+      // Act
+      const claudeTools = toolRegistry.getAvailableTools(AgentClientType.CLAUDE_CODE);
+      const geminiTools = toolRegistry.getAvailableTools(AgentClientType.GEMINI_CLI);
+
+      // Assert
+      expect(claudeTools.some(t => t.name === 'get-code-status')).toBe(true);
+      expect(geminiTools.some(t => t.name === 'get-gemini-status')).toBe(true);
+      expect(claudeTools.some(t => t.name === 'get-gemini-status')).toBe(false);
+    });
+  });
+
+  describe('executeTool', () => {
+    it('should validate tool arguments against schema', async () => {
+      // Arrange
+      const mockClient = createMockClient();
+      const invalidArgs = {}; // Missing required fields
+
+      // Act & Assert
+      await expect(toolRegistry.executeTool('pause-agent', invalidArgs, mockClient))
+        .rejects.toThrow('Missing required parameter: clientId');
+    });
+
+    it('should return structured response data', async () => {
+      // Arrange
+      const mockClient = createMockClient();
+      const validArgs = { clientId: 'test-client' };
+
+      // Act
+      const result = await toolRegistry.executeTool('get-agent-status', validArgs, mockClient);
+
+      // Assert
+      expect(result).toBeInstanceOf(Object);
+      expect(result).not.toBeInstanceOf(String);
+      expect(result).toHaveProperty('client');
+    });
+  });
+});
+```
+
+## Integration Testing Standards
+
+### ✅ PROPER Integration Tests:
+```typescript
+// src/__tests__/integration/mcp-server.test.ts
+import { AgentifyMCPServer } from '../../server/agentify-mcp.js';
+import { ServerConfig, AgentClientType } from '../../types/index.js';
+
+describe('AgentifyMCPServer Integration', () => {
+  let server: AgentifyMCPServer;
+  let config: ServerConfig;
+
+  beforeEach(() => {
+    config = createTestConfig();
+    server = new AgentifyMCPServer(config);
+  });
+
+  afterEach(async () => {
+    await server.stop();
+  });
+
+  describe('MCP Protocol Flow', () => {
+    it('should handle complete tool execution workflow', async () => {
+      // Arrange
+      await server.start();
+      const sessionManager = server.getSessionManager();
+      const mockClient = createMockClient();
+      sessionManager.registerClient(mockClient);
+
+      // Act - Simulate MCP protocol calls
+      const toolsResponse = await server.handleListTools();
+      const toolResult = await server.handleCallTool({
+        name: 'get-agent-status',
+        arguments: { clientId: mockClient.id },
+      });
+
+      // Assert
+      expect(toolsResponse.tools).toContainEqual(
+        expect.objectContaining({ name: 'get-agent-status' })
+      );
+      expect(toolResult).toHaveProperty('client');
+    });
+
+    it('should handle resource access workflow', async () => {
+      // Similar integration test for resources
+    });
+  });
+});
+```
+
+## Mock Implementation Standards
+
+### ✅ REQUIRED Mock Patterns:
+```typescript
+// src/__mocks__/chokidar.ts - Mock file system watcher
+export const watch = jest.fn(() => ({
+  on: jest.fn().mockReturnThis(),
+  close: jest.fn(),
+}));
+
+// src/__mocks__/fs/promises.ts - Mock file system operations
+export const readFile = jest.fn();
+export const access = jest.fn();
+export const stat = jest.fn();
+
+// src/__tests__/utils/test-helpers.ts - Test utilities
+export function createMockConfig(overrides: Partial<ServerConfig> = {}): ServerConfig {
+  return {
+    port: 3000,
+    host: 'localhost',
+    transports: ['stdio'],
+    security: {
+      enableAuth: false,
+      rateLimiting: { windowMs: 60000, maxRequests: 100 },
+    },
+    monitoring: {
+      enableMetrics: true,
+      metricsInterval: 1000,
+      logLevel: 'error', // Reduce noise in tests
+    },
+    ...overrides,
+  };
+}
+```
+
+## Code Quality Standards
+
+### ✅ REQUIRED Quality Gates:
+```json
+// package.json test scripts
+{
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:integration": "jest --testPathPattern=integration",
+    "test:unit": "jest --testPathPattern=unit",
+    "quality:check": "npm run lint && npm run typecheck && npm run test:coverage"
+  }
+}
+```
+
+### Coverage Requirements:
+- **Minimum 80% code coverage** for all core modules
+- **100% coverage** for critical paths (client registration, tool execution)
+- **All public methods** must be tested
+- **Error conditions** must be covered
+
+### ✅ PROPER Test Organization:
+```typescript
+// Test file naming convention
+SessionManager → session-manager.test.ts
+ToolRegistry → tool-registry.test.ts
+AgentifyMCPServer → agentify-mcp.test.ts
+
+// Test structure
+describe('ClassName', () => {
+  describe('methodName', () => {
+    it('should do something when condition is met', () => {});
+    it('should throw error when invalid input provided', () => {});
+    it('should emit event when state changes', () => {});
+  });
+});
+```
+
+## Performance Testing Standards
+
+### ✅ REQUIRED Performance Tests:
+```typescript
+// src/__tests__/performance/load.test.ts
+describe('Performance Tests', () => {
+  it('should handle multiple concurrent client registrations', async () => {
+    const server = new AgentifyMCPServer(createTestConfig());
+    const sessionManager = server.getSessionManager();
+    
+    const clients = Array.from({ length: 100 }, (_, i) => 
+      createMockClient({ id: `client-${i}` })
+    );
+
+    const startTime = Date.now();
+    
+    // Register all clients concurrently
+    await Promise.all(
+      clients.map(client => sessionManager.registerClient(client))
+    );
+    
+    const endTime = Date.now();
+    
+    expect(endTime - startTime).toBeLessThan(1000); // Should complete in < 1s
+    expect(sessionManager.getAllClients()).toHaveLength(100);
+  });
+});
+```

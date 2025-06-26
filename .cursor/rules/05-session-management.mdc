@@ -1,0 +1,318 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 05-Session-Management
+
+## Session Management Architecture
+Session management is handled by [session-manager.ts](mdc:src/server/session-manager.ts) and state tracking by [state-tracker.ts](mdc:mcp:src/server/state-tracker.ts).
+
+### Core Responsibilities
+- **SessionManager**: Client lifecycle, status tracking, metrics collection
+- **StateTracker**: File system monitoring, performance metrics, project detection
+
+## CRITICAL SESSION RULES - MUST FOLLOW
+
+### ✅ ALWAYS DO:
+1. **Use SessionManager for all client operations**: Never directly manipulate client objects
+2. **Emit events for state changes**: All client status changes must emit events
+3. **Update activity timestamps**: Every client interaction must update lastActivity
+4. **Validate client existence**: Always check if client exists before operations
+5. **Implement cleanup**: Regular cleanup of inactive clients and resources
+
+### ❌ NEVER DO:
+1. **Direct client manipulation**: Never modify client objects outside SessionManager
+2. **Skip event emission**: Never change client state without emitting events
+3. **Ignore session isolation**: Client data must be isolated by clientId
+4. **Forget resource cleanup**: Always clean up watchers and intervals on client disconnect
+5. **Bypass session validation**: Never assume a session exists without checking
+
+## Client Registration Patterns
+
+### ✅ PROPER Client Registration:
+```typescript
+// Complete client registration with all required fields
+export class SessionManager extends EventEmitter {
+  public registerClient(client: AgentClient): void {
+    // Validate required fields
+    if (!client.id || !client.type || !client.name) {
+      throw new Error('Invalid client: missing required fields');
+    }
+
+    // Set connection info
+    client.connectionInfo = {
+      ...client.connectionInfo,
+      connectedAt: new Date(),
+      lastActivity: new Date(),
+    };
+
+    // Initialize metrics if not provided
+    client.metrics = {
+      requestCount: 0,
+      errorCount: 0,
+      uptime: 0,
+      ...client.metrics,
+    };
+
+    this.clients.set(client.id, client);
+    this.emit('clientConnected', client);
+    this.logger.info(`Client registered: ${client.id} (${client.type})`);
+
+    // Start tracking for this client
+    this.stateTracker?.startTracking(client.id);
+  }
+}
+```
+
+### ❌ INCORRECT Registration:
+```typescript
+// Bad - minimal validation
+public registerClient(client: AgentClient): void {
+  this.clients.set(client.id, client); // No validation or initialization
+}
+
+// Bad - no event emission
+public registerClient(client: AgentClient): void {
+  this.clients.set(client.id, client);
+  // Missing: event emission, logging, state tracking
+}
+```
+
+## Status Management Standards
+
+### ✅ PROPER Status Updates:
+```typescript
+// Always use enum values and emit events
+public updateClientStatus(clientId: string, status: AgentStatus): void {
+  const client = this.clients.get(clientId);
+  if (!client) {
+    this.logger.warn(`Attempted to update status for non-existent client: ${clientId}`);
+    return;
+  }
+
+  const oldStatus = client.status;
+  client.status = status;
+  client.connectionInfo.lastActivity = new Date();
+
+  this.emit('clientStatusChanged', {
+    client,
+    oldStatus,
+    newStatus: status,
+  });
+
+  this.logger.debug(`Client ${clientId} status changed: ${oldStatus} -> ${status}`);
+
+  // Handle status-specific logic
+  if (status === AgentStatus.DISCONNECTED) {
+    this.handleClientDisconnection(clientId);
+  }
+}
+```
+
+### ✅ REQUIRED Status Transitions:
+```typescript
+// Define valid status transitions
+const VALID_TRANSITIONS: Record<AgentStatus, AgentStatus[]> = {
+  [AgentStatus.CONNECTED]: [AgentStatus.IDLE, AgentStatus.RUNNING, AgentStatus.DISCONNECTED],
+  [AgentStatus.IDLE]: [AgentStatus.RUNNING, AgentStatus.PAUSED, AgentStatus.DISCONNECTED],
+  [AgentStatus.RUNNING]: [AgentStatus.IDLE, AgentStatus.COMPLETED, AgentStatus.ERROR, AgentStatus.PAUSED],
+  [AgentStatus.PAUSED]: [AgentStatus.RUNNING, AgentStatus.IDLE, AgentStatus.DISCONNECTED],
+  [AgentStatus.ERROR]: [AgentStatus.IDLE, AgentStatus.RUNNING, AgentStatus.DISCONNECTED],
+  [AgentStatus.COMPLETED]: [AgentStatus.IDLE, AgentStatus.RUNNING, AgentStatus.DISCONNECTED],
+  [AgentStatus.DISCONNECTED]: [], // Terminal state
+};
+
+public updateClientStatus(clientId: string, newStatus: AgentStatus): void {
+  const client = this.clients.get(clientId);
+  if (!client) return;
+
+  const validTransitions = VALID_TRANSITIONS[client.status];
+  if (!validTransitions.includes(newStatus)) {
+    this.logger.warn(`Invalid status transition: ${client.status} -> ${newStatus}`, { clientId });
+    return;
+  }
+
+  // Proceed with status update...
+}
+```
+
+## Context Management
+
+### ✅ PROPER Context Updates:
+```typescript
+// Always merge context, don't replace
+public updateClientContext(clientId: string, context: Partial<AgentClient['context']>): void {
+  const client = this.clients.get(clientId);
+  if (!client) {
+    this.logger.warn(`Attempted to update context for non-existent client: ${clientId}`);
+    return;
+  }
+
+  // Merge new context with existing
+  const previousContext = { ...client.context };
+  client.context = { ...client.context, ...context };
+  client.connectionInfo.lastActivity = new Date();
+
+  this.emit('clientContextUpdated', {
+    client,
+    previousContext,
+    newContext: context,
+  });
+
+  this.logger.debug(`Client ${clientId} context updated`, { 
+    updatedFields: Object.keys(context) 
+  });
+}
+```
+
+## Metrics Collection Standards
+
+### ✅ PROPER Metrics Updates:
+```typescript
+// Increment counters with proper validation
+public incrementClientRequests(clientId: string): void {
+  const client = this.clients.get(clientId);
+  if (!client) {
+    this.logger.warn(`Request increment for non-existent client: ${clientId}`);
+    return;
+  }
+
+  client.metrics.requestCount++;
+  client.connectionInfo.lastActivity = new Date();
+
+  // Emit metrics update for monitoring
+  this.emit('clientMetricsUpdated', {
+    clientId,
+    metrics: client.metrics,
+    timestamp: new Date(),
+  });
+}
+
+// Update complex metrics with validation
+public updateClientMetrics(clientId: string, metrics: Partial<AgentClient['metrics']>): void {
+  const client = this.clients.get(clientId);
+  if (!client) return;
+
+  // Validate metrics before updating
+  if (metrics.cpuUsage !== undefined && (metrics.cpuUsage < 0 || metrics.cpuUsage > 100)) {
+    this.logger.warn(`Invalid CPU usage value: ${metrics.cpuUsage}`, { clientId });
+    return;
+  }
+
+  client.metrics = { ...client.metrics, ...metrics };
+  
+  this.emit('clientMetricsUpdated', {
+    client,
+    metrics: client.metrics,
+  });
+}
+```
+
+## State Tracking Integration
+
+### ✅ PROPER State Tracking:
+```typescript
+// StateTracker class integration patterns
+export class StateTracker extends EventEmitter {
+  public startTracking(clientId: string): void {
+    if (this.watchers.has(clientId)) {
+      this.logger.warn(`Already tracking client: ${clientId}`);
+      return;
+    }
+
+    this.logger.info(`Starting state tracking for client: ${clientId}`);
+
+    try {
+      this.startFileSystemTracking(clientId);
+      this.startMetricsTracking(clientId);
+      this.emit('trackingStarted', clientId);
+    } catch (error: unknown) {
+      this.logger.error(`Failed to start tracking for ${clientId}:`, error);
+      this.stopTracking(clientId); // Cleanup on failure
+      throw error;
+    }
+  }
+
+  public stopTracking(clientId: string): void {
+    this.logger.info(`Stopping state tracking for client: ${clientId}`);
+
+    // Clean up file system watcher
+    const watcher = this.watchers.get(clientId);
+    if (watcher) {
+      watcher.close();
+      this.watchers.delete(clientId);
+    }
+
+    // Clean up metrics interval
+    const interval = this.trackingIntervals.get(clientId);
+    if (interval) {
+      clearInterval(interval);
+      this.trackingIntervals.delete(clientId);
+    }
+
+    this.emit('trackingStopped', clientId);
+  }
+}
+```
+
+## Cleanup and Lifecycle Management
+
+### ✅ REQUIRED Cleanup Patterns:
+```typescript
+// Proper client disconnection handling
+private handleClientDisconnection(clientId: string): void {
+  this.logger.info(`Handling client disconnection: ${clientId}`);
+
+  // Stop state tracking
+  this.stateTracker?.stopTracking(clientId);
+
+  // Clean up any client-specific resources
+  this.cleanupClientResources(clientId);
+
+  // Remove from active sessions but keep in history
+  const client = this.clients.get(clientId);
+  if (client) {
+    this.addToHistory(client);
+    this.clients.delete(clientId);
+  }
+
+  this.emit('clientDisconnected', { clientId, timestamp: new Date() });
+}
+
+// Regular cleanup of inactive clients
+public cleanup(): void {
+  const inactiveClients = this.getInactiveClients(300000); // 5 minutes
+
+  inactiveClients.forEach((client) => {
+    this.logger.warn(`Cleaning up inactive client: ${client.id}`);
+    this.updateClientStatus(client.id, AgentStatus.DISCONNECTED);
+  });
+}
+```
+
+## Session Statistics and Monitoring
+
+### ✅ PROPER Statistics Collection:
+```typescript
+// Comprehensive session statistics
+public getClientStats(): SessionStats {
+  const clients = Array.from(this.clients.values());
+  const now = Date.now();
+
+  return {
+    total: clients.length,
+    active: this.getActiveClients().length,
+    byType: this.aggregateByProperty(clients, 'type'),
+    byStatus: this.aggregateByProperty(clients, 'status'),
+    uptime: {
+      average: this.calculateAverageUptime(clients, now),
+      longest: this.findLongestUptime(clients, now),
+    },
+    activity: {
+      mostActive: this.findMostActiveClient(clients),
+      recentlyActive: this.getRecentlyActiveClients(clients, 300000),
+    },
+  };
+}
+```

@@ -1,0 +1,321 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 07-Development-Workflow
+
+## Development Environment Setup
+The project uses TypeScript with ESNext modules and strict type checking as configured in [tsconfig.json](mdc:tsconfig.json).
+
+### Required Tools and Scripts
+- **Development**: `npm run dev` - Uses tsx for hot reloading
+- **Building**: `npm run build` - TypeScript compilation
+- **Testing**: `npm run test` - Jest test runner
+- **Linting**: `npm run lint` - ESLint with TypeScript rules
+- **Formatting**: `npm run format` - Prettier code formatting
+
+## CRITICAL DEVELOPMENT RULES - MUST FOLLOW
+
+### ✅ ALWAYS DO:
+1. **Run type checking**: Use `npm run typecheck` before committing
+2. **Follow code formatting**: Use `npm run format` to maintain consistency
+3. **Write tests first**: Implement tests alongside or before implementation
+4. **Validate MCP compliance**: Test all tools and resources against MCP standards
+5. **Update documentation**: Keep README and code comments current
+
+### ❌ NEVER DO:
+1. **Commit without linting**: Never commit code that fails ESLint checks
+2. **Skip type checking**: Never ignore TypeScript errors or warnings
+3. **Commit failing tests**: All tests must pass before committing
+4. **Mix concerns**: Keep tools, resources, and server logic separate
+5. **Ignore deprecation warnings**: Address all deprecation warnings immediately
+
+## Pre-commit Checklist
+
+### ✅ REQUIRED Before Every Commit:
+```bash
+# 1. Format code
+npm run format
+
+# 2. Lint and fix issues
+npm run lint:fix
+
+# 3. Type check
+npm run typecheck
+
+# 4. Run all tests
+npm run test
+
+# 5. Check coverage
+npm run test:coverage
+
+# 6. Build verification
+npm run build
+```
+
+### Git Commit Standards
+```bash
+# Use conventional commit format
+feat: add new tool for Gemini CLI client status
+fix: resolve session cleanup memory leak
+docs: update MCP protocol documentation
+test: add integration tests for state tracker
+refactor: extract common client validation logic
+```
+
+## Code Review Guidelines
+
+### ✅ REVIEW CHECKLIST:
+1. **Type Safety**: All types properly defined and used
+2. **Error Handling**: Proper try-catch blocks and error emission
+3. **Logging**: Appropriate use of Logger instead of console
+4. **Testing**: Adequate test coverage for new functionality
+5. **MCP Compliance**: Tools and resources follow MCP protocol
+6. **Documentation**: Code is self-documenting with clear comments
+7. **Performance**: No obvious performance bottlenecks
+8. **Security**: No sensitive data exposure in logs
+
+### Code Review Standards:
+```typescript
+// ✅ GOOD - Well documented, typed, and error handled
+/**
+ * Registers a new MCP client and starts monitoring
+ * @param client - The agent client to register
+ * @throws {Error} When client validation fails
+ */
+public registerClient(client: AgentClient): void {
+  this.validateClientData(client);
+  
+  try {
+    this.clients.set(client.id, client);
+    this.emit('clientConnected', client);
+    this.logger.info(`Client registered: ${client.id}`);
+    this.stateTracker.startTracking(client.id);
+  } catch (error: unknown) {
+    this.logger.error(`Failed to register client ${client.id}:`, error);
+    throw error;
+  }
+}
+
+// ❌ BAD - No documentation, poor error handling
+public registerClient(client: any): void {
+  this.clients.set(client.id, client);
+  console.log('Client registered'); // Wrong logging
+  // No error handling, no type safety
+}
+```
+
+## Branch Strategy and Workflow
+
+### ✅ PROPER Branch Workflow:
+```bash
+# Feature development
+git checkout -b feature/add-notification-channels
+git commit -m "feat: add Discord notification channel"
+git push origin feature/add-notification-channels
+
+# Bug fixes
+git checkout -b fix/session-memory-leak
+git commit -m "fix: resolve session cleanup memory leak"
+
+# Hotfixes
+git checkout -b hotfix/critical-mcp-bug
+git commit -m "fix: resolve critical MCP protocol issue"
+```
+
+### Branch Naming Convention:
+- **Features**: `feature/description-in-kebab-case`
+- **Bug fixes**: `fix/description-of-issue`
+- **Hotfixes**: `hotfix/critical-issue-description`
+- **Documentation**: `docs/what-was-updated`
+- **Refactoring**: `refactor/component-or-area`
+
+## Development Best Practices
+
+### ✅ PROPER File Organization:
+```typescript
+// File header with clear purpose
+/**
+ * @fileoverview Tool registry for managing MCP tools by client type
+ * Handles tool registration, validation, and execution with proper error handling
+ */
+
+// Imports grouped and organized
+import { EventEmitter } from 'events';
+import { AgentClient, AgentClientType } from '../types/index.js';
+import { SessionManager } from '../server/session-manager.js';
+import { Logger } from '../utils/logger.js';
+
+// Clear class documentation
+/**
+ * Registry for managing MCP tools with client type filtering
+ * Provides tool registration, discovery, and execution capabilities
+ */
+export class ToolRegistry extends EventEmitter {
+  // Private members first
+  private tools: Map<string, ToolDefinition> = new Map();
+  
+  // Constructor with dependency injection
+  constructor(
+    private sessionManager: SessionManager,
+    private stateTracker: StateTracker,
+    private logger: Logger
+  ) {
+    super();
+    this.registerDefaultTools();
+  }
+  
+  // Public methods first, private methods last
+  public registerTool(tool: ToolDefinition): void { ... }
+  public getAvailableTools(clientType?: AgentClientType): ToolDefinition[] { ... }
+  
+  private registerDefaultTools(): void { ... }
+}
+```
+
+## Environment Configuration
+
+### ✅ REQUIRED Environment Setup:
+```bash
+# .env.example (create this file)
+# Server Configuration
+SERVER_PORT=3000
+SERVER_HOST=0.0.0.0
+LOG_LEVEL=info
+
+# Security Settings
+ENABLE_AUTH=false
+API_KEYS=key1,key2,key3
+
+# Monitoring Settings
+ENABLE_METRICS=true
+METRICS_INTERVAL=10000
+
+# Notification Settings
+SLACK_WEBHOOK_URL=https://hooks.slack.com/...
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+```
+
+### Configuration Validation:
+```typescript
+// src/config/validation.ts - Create this for config validation
+import { z } from 'zod';
+
+const ServerConfigSchema = z.object({
+  port: z.number().min(1000).max(65535),
+  host: z.string().min(1),
+  transports: z.array(z.enum(['stdio', 'websocket', 'http'])),
+  security: z.object({
+    enableAuth: z.boolean(),
+    apiKeys: z.array(z.string()).optional(),
+    rateLimiting: z.object({
+      windowMs: z.number().positive(),
+      maxRequests: z.number().positive(),
+    }).optional(),
+  }),
+  monitoring: z.object({
+    enableMetrics: z.boolean(),
+    metricsInterval: z.number().positive(),
+    logLevel: z.enum(['error', 'warn', 'info', 'debug']),
+  }),
+});
+
+export function validateConfig(config: unknown): ServerConfig {
+  return ServerConfigSchema.parse(config);
+}
+```
+
+## Debugging and Troubleshooting
+
+### ✅ PROPER Debug Configuration:
+```json
+// .vscode/launch.json - VS Code debugging
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug MCP Server",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/index.ts",
+      "env": {
+        "NODE_ENV": "development",
+        "LOG_LEVEL": "debug"
+      },
+      "runtimeArgs": ["--loader", "tsx/esm"],
+      "skipFiles": ["<node_internals>/**"],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Debug Tests",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/node_modules/.bin/jest",
+      "args": ["--runInBand"],
+      "env": {
+        "NODE_ENV": "test"
+      },
+      "console": "integratedTerminal"
+    }
+  ]
+}
+```
+
+### Debug Logging Standards:
+```typescript
+// ✅ PROPER Debug Information
+this.logger.debug('Processing tool request:', {
+  toolName: name,
+  clientId: client.id,
+  clientType: client.type,
+  args: this.sanitizeArgs(args), // Remove sensitive data
+  timestamp: new Date().toISOString(),
+});
+
+// ✅ PROPER Error Context
+this.logger.error('Tool execution failed:', {
+  operation: 'executeTool',
+  toolName: name,
+  clientId: client.id,
+  error: error instanceof Error ? {
+    message: error.message,
+    stack: error.stack,
+    name: error.name,
+  } : error,
+  context: {
+    activeClients: this.sessionManager.getActiveClients().length,
+    registeredTools: this.tools.size,
+  },
+});
+```
+
+## Performance Monitoring
+
+### ✅ REQUIRED Performance Tracking:
+```typescript
+// Add performance monitoring to critical paths
+public async executeTool(name: string, args: any, client: AgentClient): Promise<any> {
+  const startTime = Date.now();
+  
+  try {
+    const result = await this.performToolExecution(name, args, client);
+    
+    const duration = Date.now() - startTime;
+    this.logger.debug(`Tool execution completed:`, {
+      toolName: name,
+      duration: `${duration}ms`,
+      clientId: client.id,
+    });
+    
+    // Track performance metrics
+    this.emit('toolExecuted', { name, duration, success: true, clientId: client.id });
+    
+    return result;
+  } catch (error: unknown) {
+    const duration = Date.now() - startTime;
+    this.emit('toolExecuted', { name, duration, success: false, error, clientId: client.id });
+    throw error;
+  }
+}
+```
