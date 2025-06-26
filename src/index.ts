@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import { AgentifyMCPServer } from './server/agentify-mcp-server.js';
 import { ServerConfig } from './types/index.js';
 
