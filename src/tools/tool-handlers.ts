@@ -1,20 +1,12 @@
 import { z } from 'zod';
 import { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js';
-import { AgentClient, AgentStatus } from '../types/index.js';
+import { AgentClient } from '../types/index.js';
 import { SessionManager } from '../server/session-manager.js';
 import { StateTracker } from '../server/state-tracker.js';
 
 // Zod 스키마 정의
 export const GetAgentStatusSchema = z.object({
   clientId: z.string().optional().describe('Client ID to get status for. If not provided, returns all agents'),
-});
-
-export const PauseAgentSchema = z.object({
-  clientId: z.string().describe('Client ID to pause'),
-});
-
-export const ResumeAgentSchema = z.object({
-  clientId: z.string().describe('Client ID to resume'),
 });
 
 export const GetFileChangesSchema = z.object({
@@ -33,16 +25,18 @@ export const GetMetricsSchema = z.object({
     .describe('Time range for metrics'),
 });
 
-export const MarkTaskCompletedSchema = z.object({
-  clientId: z.string().optional().describe('Client ID to mark task as completed'),
-  reason: z.string().optional().describe('Reason for completion'),
+export const TaskCompletedSchema = z.object({
+  clientId: z.string().optional().describe('Client ID that completed the task'),
+  taskDescription: z.string().describe('Brief description of what was completed'),
+  outcome: z.enum(['success', 'partial', 'failed']).describe('Task completion outcome'),
+  details: z.string().optional().describe('Additional details about the completion'),
 });
 
 // 도구 정의를 상수로 정의
 export const AGENTIFY_TOOLS: Tool[] = [
   {
     name: 'get-agent-status',
-    description: 'Get current status of an agent or all agents',
+    description: 'Get current status and information about connected AI agents',
     inputSchema: {
       type: 'object',
       properties: {
@@ -54,36 +48,37 @@ export const AGENTIFY_TOOLS: Tool[] = [
     },
   },
   {
-    name: 'pause-agent',
-    description: 'Pause an agent',
+    name: 'task-completed',
+    description:
+      'Call this when you finish any task, answer a question, or complete work. This tracks your activity and helps monitor progress.',
     inputSchema: {
       type: 'object',
       properties: {
         clientId: {
           type: 'string',
-          description: 'Client ID to pause',
+          description: 'Client ID that completed the task (optional, auto-detected if not provided)',
         },
-      },
-      required: ['clientId'],
-    },
-  },
-  {
-    name: 'resume-agent',
-    description: 'Resume a paused agent',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        clientId: {
+        taskDescription: {
           type: 'string',
-          description: 'Client ID to resume',
+          description:
+            'Brief description of what you just completed (e.g., "answered user question about React", "fixed bug in authentication")',
+        },
+        outcome: {
+          type: 'string',
+          enum: ['success', 'partial', 'failed'],
+          description: 'How the task completed - success (fully done), partial (partially done), or failed',
+        },
+        details: {
+          type: 'string',
+          description: 'Optional additional details about what was accomplished',
         },
       },
-      required: ['clientId'],
+      required: ['taskDescription', 'outcome'],
     },
   },
   {
     name: 'get-file-changes',
-    description: 'Get recent file changes monitored by the state tracker',
+    description: 'Get recent file system changes detected by the monitoring system',
     inputSchema: {
       type: 'object',
       properties: {
@@ -99,8 +94,8 @@ export const AGENTIFY_TOOLS: Tool[] = [
     },
   },
   {
-    name: 'get-metrics',
-    description: 'Get performance metrics for agents',
+    name: 'get-performance-metrics',
+    description: 'Get performance and usage metrics for AI agents',
     inputSchema: {
       type: 'object',
       properties: {
@@ -114,23 +109,6 @@ export const AGENTIFY_TOOLS: Tool[] = [
             start: { type: 'string' },
             end: { type: 'string' },
           },
-        },
-      },
-    },
-  },
-  {
-    name: 'mark-task-completed',
-    description: 'Manually mark a task as completed for an agent',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        clientId: {
-          type: 'string',
-          description: 'Client ID to mark task as completed',
-        },
-        reason: {
-          type: 'string',
-          description: 'Reason for completion',
         },
       },
     },
@@ -210,17 +188,40 @@ Working Directory: ${targetClient.context.workingDirectory || 'N/A'}`,
     }
   }
 
-  async handlePauseAgent(args: any): Promise<CallToolResult> {
+  async handleTaskCompleted(args: any): Promise<CallToolResult> {
     try {
-      const validatedArgs = PauseAgentSchema.parse(args);
-      const { clientId } = validatedArgs;
+      const validatedArgs = TaskCompletedSchema.parse(args);
+      const { clientId, taskDescription, outcome, details } = validatedArgs;
 
-      this.sessionManager.updateClientStatus(clientId, AgentStatus.PAUSED);
+      const targetClientId = clientId || this.getCurrentClient().id;
+      const timestamp = new Date();
+
+      // StateTracker에 작업 완료 기록
+      this.stateTracker.markTaskCompleted(targetClientId, taskDescription);
+
+      // 메트릭 업데이트
+      const client = this.sessionManager.getClient(targetClientId);
+      if (client) {
+        client.metrics.requestCount += 1;
+        if (outcome === 'failed') {
+          client.metrics.errorCount += 1;
+        }
+      }
+
+      const outcomeEmoji = {
+        success: '✅',
+        partial: '⚠️',
+        failed: '❌',
+      }[outcome];
+
       return {
         content: [
           {
             type: 'text',
-            text: `✅ Agent ${clientId} has been paused successfully`,
+            text: `${outcomeEmoji} Task Completed (${outcome.toUpperCase()})
+Agent: ${targetClientId}
+Task: ${taskDescription}
+Time: ${timestamp.toLocaleString()}${details ? `\nDetails: ${details}` : ''}`,
           },
         ],
       };
@@ -229,34 +230,7 @@ Working Directory: ${targetClient.context.workingDirectory || 'N/A'}`,
         content: [
           {
             type: 'text',
-            text: `Error pausing agent: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
-
-  async handleResumeAgent(args: any): Promise<CallToolResult> {
-    try {
-      const validatedArgs = ResumeAgentSchema.parse(args);
-      const { clientId } = validatedArgs;
-
-      this.sessionManager.updateClientStatus(clientId, AgentStatus.RUNNING);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `✅ Agent ${clientId} has been resumed successfully`,
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Error resuming agent: ${error instanceof Error ? error.message : String(error)}`,
+            text: `Error recording task completion: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
         isError: true,
@@ -353,38 +327,6 @@ Working Directory: ${targetClient.context.workingDirectory || 'N/A'}`,
           {
             type: 'text',
             text: `Error getting metrics: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
-
-  async handleMarkTaskCompleted(args: any): Promise<CallToolResult> {
-    try {
-      const validatedArgs = MarkTaskCompletedSchema.parse(args);
-      const { clientId, reason } = validatedArgs;
-
-      const targetClientId = clientId || this.getCurrentClient().id;
-
-      this.stateTracker.markTaskCompleted(targetClientId, reason || 'manual');
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `🎉 Task marked as completed for agent ${targetClientId}!
-Reason: ${reason || 'manual completion'}
-Timestamp: ${new Date().toLocaleString()}`,
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Error marking task completed: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
         isError: true,

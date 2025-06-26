@@ -34,7 +34,7 @@ The server implements the MCP (Model Context Protocol) using `@modelcontextproto
 **AgentifyMCPServer** (`src/server/agentify-mcp-server.ts`)
 
 - Main server class with constructor dependency injection
-- Handles MCP protocol requests (Initialize, ListTools, CallTool, ListResources, ReadResource)  
+- Handles MCP protocol requests (Initialize, ListTools, CallTool, ListResources, ReadResource)
 - Client type detection based on user agent strings
 - Creates default client session when none exists
 - Event-driven architecture with comprehensive listeners
@@ -54,7 +54,7 @@ The server implements the MCP (Model Context Protocol) using `@modelcontextproto
 - Periodic performance metrics collection (CPU, memory)
 - Sophisticated task completion detection system:
   - Idle timeout monitoring
-  - File change pattern analysis  
+  - File change pattern analysis
   - Completion keyword detection
   - Process monitoring capabilities
 - Project info detection (package.json, git status)
@@ -84,7 +84,7 @@ The server implements the MCP (Model Context Protocol) using `@modelcontextproto
 The server supports multiple AI client types defined in `AgentClientType` enum:
 
 - `CLAUDE_CODE`: Detected via "claude-code" user agent
-- `GEMINI_CLI`: Detected via "gemini-cli" user agent  
+- `GEMINI_CLI`: Detected via "gemini-cli" user agent
 - `OPENAI_CLI`: Detected via "openai-cli" user agent
 - `CUSTOM`: Default fallback for unrecognized clients
 
@@ -95,10 +95,12 @@ Client detection happens automatically via user agent strings during MCP initial
 Components communicate through EventEmitter patterns:
 
 **SessionManager Events:**
+
 - `clientConnected`/`clientDisconnected`: Client lifecycle
 - `clientStatusChanged`/`clientContextUpdated`: State changes
 
 **StateTracker Events:**
+
 - `fileChanged`: File system modifications
 - `taskCompleted`/`agentTaskCompleted`: Task completion detection
 - Automatic task monitoring setup on client connection
@@ -114,6 +116,7 @@ Server configuration is defined in `ServerConfig` interface:
 - `monitoring`: File watching disabled by default, configurable logging levels
 
 Default configuration in `src/index.ts`:
+
 - Uses stdio transport for MCP communication
 - File watching disabled (`enableFileWatching: false`)
 - Basic logging configuration
@@ -145,6 +148,7 @@ To connect this server to Claude Code, add to `claude_desktop_config.json`:
 ### Automatic Task Completion Detection
 
 The StateTracker includes sophisticated completion detection:
+
 - Idle timeout monitoring (configurable threshold)
 - File change pattern analysis
 - Keyword detection in modified files
