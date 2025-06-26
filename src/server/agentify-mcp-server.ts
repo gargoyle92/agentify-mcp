@@ -32,7 +32,7 @@ export class AgentifyMCPServer {
     this.server = new Server(
       {
         name: 'agentify-mcp',
-        version: '1.0.0',
+        version: '0.0.4',
       },
       {
         capabilities: {
@@ -41,6 +41,12 @@ export class AgentifyMCPServer {
         },
       },
     );
+
+    // 서버 에러 이벤트 핸들링
+    this.server.onerror = (error) => {
+      this.logger.error('MCP Server error:', error);
+      console.error('MCP Server error:', error);
+    };
 
     this.sessionManager = new SessionManager(this.logger);
     this.stateTracker = new StateTracker(this.logger, this.config);
@@ -67,21 +73,26 @@ export class AgentifyMCPServer {
 
   private setupHandlers(): void {
     this.server.setRequestHandler(InitializeRequestSchema, async (request) => {
-      this.logger.debug('Client initializing...');
-      const clientType = this.detectClientType(request.params);
-      this.logger.debug(`Detected client type: ${clientType}`);
+      try {
+        this.logger.debug('Client initializing...');
+        const clientType = this.detectClientType(request.params);
+        this.logger.debug(`Detected client type: ${clientType}`);
 
-      return {
-        protocolVersion: '2024-11-05',
-        capabilities: {
-          tools: {},
-          resources: {},
-        },
-        serverInfo: {
-          name: 'agentify-mcp',
-          version: '1.0.0',
-        },
-      };
+        return {
+          protocolVersion: request.params.protocolVersion,
+          capabilities: {
+            tools: {},
+            resources: {},
+          },
+          serverInfo: {
+            name: 'agentify-mcp',
+            version: '0.0.4',
+          },
+        };
+      } catch (error) {
+        this.logger.error('Error during initialization:', error);
+        throw error;
+      }
     });
 
     // 도구 목록 반환
