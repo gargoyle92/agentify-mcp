@@ -1,6 +1,6 @@
 {
   "name": "agentify-mcp",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Agentify MCP Server - Multi-client AI agent monitoring and control system with auto task completion detection",
   "type": "module",
   "bin": {
