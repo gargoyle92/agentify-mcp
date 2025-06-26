@@ -16,6 +16,7 @@ export interface AgentClient {
 }
 
 export enum AgentClientType {
+  CLAUDE_DESKTOP = 'claude-ai',
   CLAUDE_CODE = 'claude-code',
   GEMINI_CLI = 'gemini-cli',
   OPENAI_CLI = 'openai-cli',
@@ -81,6 +82,7 @@ export interface NotificationConfig {
     slack?: SlackConfig;
     discord?: DiscordConfig;
     webhook?: WebhookConfig;
+    airtable?: AirtableConfig;
     email?: EmailConfig;
   };
   rules: NotificationRule[];
@@ -116,6 +118,12 @@ export interface WebhookConfig {
   url: string;
   headers?: Record<string, string>;
   method?: 'POST' | 'PUT';
+}
+
+export interface AirtableConfig {
+  apiKey: string;
+  baseId: string;
+  tableName: string;
 }
 
 export interface EmailConfig {
@@ -155,4 +163,5 @@ export interface ServerConfig {
     ignorePaths?: string[];
     debounceMs?: number;
   };
+  notifications?: NotificationConfig;
 }

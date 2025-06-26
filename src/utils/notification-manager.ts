@@ -79,7 +79,7 @@ export class NotificationManager extends EventEmitter {
 
     for (const channelName of rule.channels) {
       try {
-        await this.sendToChannel(channelName, message, rule);
+        await this.sendToChannel(channelName, message, rule, event, data, client);
         this.logger.debug(`Notification sent to ${channelName}: ${rule.name}`);
       } catch (error) {
         this.logger.error(`Failed to send notification to ${channelName}:`, error);
@@ -87,7 +87,14 @@ export class NotificationManager extends EventEmitter {
     }
   }
 
-  private async sendToChannel(channelName: string, message: string, rule: NotificationRule): Promise<void> {
+  private async sendToChannel(
+    channelName: string,
+    message: string,
+    rule: NotificationRule,
+    event?: string,
+    data?: any,
+    client?: AgentClient,
+  ): Promise<void> {
     const { channels } = this.config;
 
     switch (channelName) {
@@ -103,7 +110,12 @@ export class NotificationManager extends EventEmitter {
         break;
       case 'webhook':
         if (channels.webhook) {
-          await this.sendWebhookNotification(channels.webhook, message, rule);
+          await this.sendWebhookNotification(channels.webhook, message, rule, event, data, client);
+        }
+        break;
+      case 'airtable':
+        if (channels.airtable) {
+          await this.sendAirtableNotification(channels.airtable, message, rule, event, data, client);
         }
         break;
       case 'email':
@@ -143,21 +155,94 @@ export class NotificationManager extends EventEmitter {
     });
   }
 
-  private async sendWebhookNotification(config: any, message: string, rule: NotificationRule): Promise<void> {
+  private async sendWebhookNotification(
+    config: any,
+    message: string,
+    rule: NotificationRule,
+    event?: string,
+    data?: any,
+    client?: AgentClient,
+  ): Promise<void> {
     const payload = {
+      // 기본 정보
       message,
       rule: rule.name,
       timestamp: new Date().toISOString(),
+
+      // MCP 이벤트 상세 정보
+      event: {
+        type: event,
+        data: data,
+      },
+
+      // 클라이언트 정보
+      client: client
+        ? {
+            id: client.id,
+            type: client.type,
+            name: client.name,
+            status: client.status,
+            metrics: client.metrics,
+            workingDirectory: client.context?.workingDirectory,
+          }
+        : null,
+
+      // 서버 정보
+      server: {
+        version: '0.0.4',
+        uptime: process.uptime(),
+        memory: process.memoryUsage(),
+      },
     };
 
-    await fetch(config.url, {
+    const response = await fetch(config.url, {
       method: config.method || 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...config.headers,
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(payload, null, 2),
     });
+
+    if (!response.ok) {
+      throw new Error(`Webhook failed: ${response.status} ${response.statusText}`);
+    }
+  }
+
+  private async sendAirtableNotification(
+    config: any,
+    message: string,
+    rule: NotificationRule,
+    event?: string,
+    data?: any,
+    client?: AgentClient,
+  ): Promise<void> {
+    const record = {
+      fields: {
+        timestamp: new Date().toISOString(),
+        event_type: event || 'unknown',
+        client_id: client?.id || 'unknown',
+        client_type: client?.type || 'unknown',
+        message: message,
+        rule_name: rule.name,
+        data: JSON.stringify(data || {}, null, 2),
+        server_uptime: process.uptime(),
+        memory_usage: JSON.stringify(process.memoryUsage()),
+      },
+    };
+
+    const response = await fetch(`https://api.airtable.com/v0/${config.baseId}/${config.tableName}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(record),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Airtable API failed: ${response.status} ${response.statusText}`);
+    }
   }
 
   private async sendEmailNotification(_config: any, message: string, rule: NotificationRule): Promise<void> {
