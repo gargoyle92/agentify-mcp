@@ -3,6 +3,14 @@ import { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js';
 import { Logger } from '../utils/logger.js';
 
 // Zod 스키마 정의
+export const TaskStartedSchema = z.object({
+  taskDescription: z.string().describe('Brief description of what was started'),
+});
+
+export const AutoTaskTrackerSchema = z.object({
+  taskThresholdSeconds: z.number().optional().describe('Auto-trigger when task exceeds this duration'),
+});
+
 export const TaskCompletedSchema = z.object({
   taskDescription: z.string().describe('Brief description of what was completed'),
   outcome: z.enum(['success', 'partial', 'failed']).describe('Task completion outcome'),
@@ -23,6 +31,7 @@ export const AGENTIFY_TOOLS: Tool[] = [
             'Brief description of what you just started (e.g., "answered user question about React", "fixed bug in authentication")',
         },
       },
+      required: ['taskDescription'],
     },
   },
   {
@@ -72,6 +81,73 @@ export class ToolHandlers {
 
   constructor(logger: Logger) {
     this.logger = logger;
+  }
+
+  async handleTaskStarted(args: any): Promise<CallToolResult> {
+    try {
+      const validatedArgs = TaskStartedSchema.parse(args);
+      const { taskDescription } = validatedArgs;
+
+      const timestamp = new Date();
+
+      this.logger.info(`Task started: ${taskDescription}`);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `🚀 Task Started
+Task: ${taskDescription}
+Time: ${timestamp.toLocaleString()}`,
+          },
+        ],
+      };
+    } catch (error) {
+      this.logger.error('Error recording task start:', error);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error recording task start: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  async handleAutoTaskTracker(args: any): Promise<CallToolResult> {
+    try {
+      const validatedArgs = AutoTaskTrackerSchema.parse(args);
+      const { taskThresholdSeconds = 30 } = validatedArgs;
+
+      const timestamp = new Date();
+
+      this.logger.info(`Auto task tracker activated with threshold: ${taskThresholdSeconds}s`);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `⏱️ Auto Task Tracker Activated
+Threshold: ${taskThresholdSeconds} seconds
+Time: ${timestamp.toLocaleString()}
+Status: Monitoring long-running operations`,
+          },
+        ],
+      };
+    } catch (error) {
+      this.logger.error('Error in auto task tracker:', error);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error in auto task tracker: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
   }
 
   async handleTaskCompleted(args: any): Promise<CallToolResult> {

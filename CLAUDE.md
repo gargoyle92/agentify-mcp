@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Agentify MCP Server is a Model Context Protocol (MCP) server that enables monitoring and control of multiple AI agents (Claude Code, Gemini CLI, OpenAI CLI, etc.) from a unified platform. It provides real-time state tracking, file system monitoring, performance metrics, and notification systems.
+Agentify MCP Server is a Model Context Protocol (MCP) server that provides task completion tracking and monitoring capabilities for AI clients. It offers basic webhook integration for external monitoring and implements a simple MCP server architecture.
 
 ## Development Commands
 
@@ -27,99 +27,51 @@ npm test            # Run Jest tests (when implemented)
 
 ### MCP Protocol Integration
 
-The server implements the MCP (Model Context Protocol) using `@modelcontextprotocol/sdk`. The main server class `AgentifyMCPServer` handles JSON-RPC 2.0 requests and provides tools/resources to connected AI clients.
+The server implements the MCP (Model Context Protocol) using `@modelcontextprotocol/sdk`. The main server class `AgentifyMCPServer` handles JSON-RPC 2.0 requests and provides tools to connected AI clients.
 
-### Key Components Architecture
+### Key Components
 
 **AgentifyMCPServer** (`src/server/agentify-mcp-server.ts`)
 
-- Main server class with constructor dependency injection
-- Handles MCP protocol requests (Initialize, ListTools, CallTool, ListResources, ReadResource)
-- Client type detection based on user agent strings
-- Creates default client session when none exists
-- Event-driven architecture with comprehensive listeners
-- Uses StdioServerTransport for communication
-
-**SessionManager** (`src/server/session-manager.ts`)
-
-- EventEmitter-based client lifecycle management
-- Client registration/unregistration with status tracking
-- Context and metrics updates for active clients
-- Client filtering by type, status, and activity
-- Automatic cleanup of inactive clients
-
-**StateTracker** (`src/server/state-tracker.ts`)
-
-- Optional chokidar file system monitoring (disabled by default)
-- Periodic performance metrics collection (CPU, memory)
-- Sophisticated task completion detection system:
-  - Idle timeout monitoring
-  - File change pattern analysis
-  - Completion keyword detection
-  - Process monitoring capabilities
-- Project info detection (package.json, git status)
+- Main MCP server implementation with stdio transport
+- Handles Initialize, ListTools, and CallTool requests
+- Integrates with webhook system for external monitoring
+- Currently implements only the `task-completed` tool
 
 **ToolHandlers** (`src/tools/tool-handlers.ts`)
 
-- Implements 6 MCP tools with Zod input validation:
-  - `get-agent-status`: Client status reporting
-  - `pause-agent`/`resume-agent`: Agent lifecycle control
-  - `get-file-changes`: File monitoring results
-  - `get-metrics`: Performance and system metrics
-  - `mark-task-completed`: Manual completion marking
-- Error handling with structured response format
+- Implements 3 MCP tools with Zod input validation:
+  - `task-started`: Mark when a task begins
+  - `auto-task-tracker`: Automatic task progress monitoring
+  - `task-completed`: Mark task completion with outcome
+- Uses structured response format with emojis for visual feedback
 
-**ResourceHandlers** (`src/resources/resource-handlers.ts`)
+**Logger** (`src/utils/logger.ts`)
 
-- Provides 5 MCP resources via agentify:// URI scheme:
-  - `agentify://logs/combined`: System logs
-  - `agentify://status/agents`: Agent status (Markdown)
-  - `agentify://config/server`: Server configuration (JSON)
-  - `agentify://metrics/performance`: Performance data (JSON)
-  - `agentify://files/changes`: File changes (Plain text)
-- Dynamic client-specific resource generation
+- Configurable logging with levels (error, warn, info, debug)
+- Timestamp formatting and structured output
+- Used throughout the application instead of console.log
 
-### Client Type System
+**SimpleWebhook** (`src/utils/webhook.ts`)
 
-The server supports multiple AI client types defined in `AgentClientType` enum:
+- HTTP webhook integration for external monitoring
+- Sends task events (started, completed, error) to configured endpoint
+- Includes payload structure with timestamp, event type, and metadata
 
-- `CLAUDE_CODE`: Detected via "claude-code" user agent
-- `GEMINI_CLI`: Detected via "gemini-cli" user agent
-- `OPENAI_CLI`: Detected via "openai-cli" user agent
-- `CUSTOM`: Default fallback for unrecognized clients
+### Current Implementation Status
 
-Client detection happens automatically via user agent strings during MCP initialization. All clients currently receive the same tools and resources (no filtering implemented).
+The current codebase is a simplified version focused on:
 
-### Event-Driven Architecture
+- Basic task completion tracking
+- MCP protocol compliance
+- Webhook integration for monitoring
+- Simple logging system
 
-Components communicate through EventEmitter patterns:
-
-**SessionManager Events:**
-
-- `clientConnected`/`clientDisconnected`: Client lifecycle
-- `clientStatusChanged`/`clientContextUpdated`: State changes
-
-**StateTracker Events:**
-
-- `fileChanged`: File system modifications
-- `taskCompleted`/`agentTaskCompleted`: Task completion detection
-- Automatic task monitoring setup on client connection
-
-**NotificationManager**: Processes events and sends alerts (basic implementation)
-
-## Configuration
-
-Server configuration is defined in `ServerConfig` interface:
-
-- `transports`: Currently only stdio transport implemented
-- `security`: Placeholder configuration (not implemented)
-- `monitoring`: File watching disabled by default, configurable logging levels
-
-Default configuration in `src/index.ts`:
-
-- Uses stdio transport for MCP communication
-- File watching disabled (`enableFileWatching: false`)
-- Basic logging configuration
+Missing components mentioned in documentation:
+- SessionManager and StateTracker are not implemented
+- ResourceHandlers and multi-client support are not implemented
+- File system monitoring is not implemented
+- Client type detection is not implemented
 
 ## MCP Client Integration
 
@@ -136,28 +88,35 @@ To connect this server to Claude Code, add to `claude_desktop_config.json`:
 }
 ```
 
+## Tool Implementation
+
+### Available Tools
+
+1. **task-started**: Records when a task begins
+2. **auto-task-tracker**: Monitors long-running tasks automatically
+3. **task-completed**: Records task completion with success/partial/failed outcomes
+
+### Tool Response Format
+
+All tools return structured responses with:
+- Text content with emoji indicators
+- Timestamp information
+- Success/error status
+- Optional additional details
+
 ## Extension Points
 
-- **Tools**: Add new tools to `AGENTIFY_TOOLS` constant in `src/tools/tool-handlers.ts`
-- **Resources**: Add new resources to `AGENTIFY_RESOURCES` constant in `src/resources/resource-handlers.ts`
-- **Client Types**: Extend `AgentClientType` enum in `src/types/index.ts` and update detection logic
-- **Notifications**: Extend NotificationManager in `src/utils/notification-manager.ts`
+- **Tools**: Add new tools to `AGENTIFY_TOOLS` array in `src/tools/tool-handlers.ts`
+- **Webhook Events**: Extend `WebhookPayload` interface in `src/utils/webhook.ts`
+- **Logging**: Configure log levels in `Logger` constructor
 
-## Key Implementation Details
+## Architecture Guidelines
 
-### Automatic Task Completion Detection
+Based on the Cursor rules, follow these patterns:
 
-The StateTracker includes sophisticated completion detection:
-
-- Idle timeout monitoring (configurable threshold)
-- File change pattern analysis
-- Keyword detection in modified files
-- Integration with client session lifecycle
-
-### Default Client Session
-
-When no active sessions exist, the server automatically creates a default client session to maintain MCP functionality.
-
-### Zod Validation
-
-All tool inputs use Zod schemas for type safety and input validation, ensuring robust error handling.
+- Use dependency injection for Logger instances
+- Always use Logger instead of console.log
+- Implement proper error handling with try-catch blocks
+- Use Zod for input validation
+- Follow MCP protocol standards for tool definitions
+- Use proper TypeScript typing throughout

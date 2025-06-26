@@ -22,7 +22,6 @@ export class SimpleWebhook {
 
   async send(payload: WebhookPayload): Promise<void> {
     try {
-      fetch(this.webhookUrl, { method: 'GET' });
       const response = await fetch(this.webhookUrl, {
         method: 'POST',
         headers: {

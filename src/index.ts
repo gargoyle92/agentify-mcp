@@ -1,9 +1,21 @@
 #!/usr/bin/env node
 
-import { AgentifyMCPServer } from './server/agentify-mcp-server.js';
+import { AgentifyMCPServer, ServerConfig } from './server/agentify-mcp-server.js';
 
 async function main() {
-  const server = new AgentifyMCPServer();
+  // 설정 준비 - 환경변수로 관리 가능
+  const config: ServerConfig = {
+    webhookUrl: process.env.AGENTIFY_WEBHOOK_URL || process.env.WEBHOOK_URL,
+    logLevel: (process.env.LOG_LEVEL as any) || 'info',
+  };
+
+  const server = new AgentifyMCPServer(config);
+
+  // 시작시 상태 로그
+  console.log('🚀 Agentify MCP Server');
+  console.log(`📋 Webhook: ${server.isWebhookEnabled() ? '✅ Enabled' : '❌ Disabled'}`);
+  console.log(`📝 Log Level: ${config.logLevel}`);
+  console.log('');
 
   // Graceful shutdown
   process.on('SIGINT', async () => {
