@@ -22,11 +22,10 @@ export class AgentifyMCPServer {
 
   constructor(config: ServerConfig = {}) {
     this.logger = new Logger(config.logLevel || 'info');
-
     this.server = new Server(
       {
         name: 'agentify-mcp',
-        version: '0.0.6',
+        version: '0.0.8',
       },
       {
         capabilities: {
@@ -86,7 +85,7 @@ export class AgentifyMCPServer {
         },
         serverInfo: {
           name: 'agentify-mcp',
-          version: '0.0.6',
+          version: '0.0.8',
         },
       };
     });
@@ -140,7 +139,7 @@ export class AgentifyMCPServer {
           content: [
             {
               type: 'text',
-              text: `Error executing tool ${name}: ${err instanceof Error ? err.message : String(err)}`,
+              text: `Error executing tool ${name}: Tool execution failed`,
             },
           ],
           isError: true,

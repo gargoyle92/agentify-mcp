@@ -4,49 +4,49 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 
-🤖 **AI 작업 추적과 webhook 알림을 위한 간단한 MCP 서버**
+🤖 **A simple MCP server for AI task tracking and webhook notifications**
 
-AI가 작업을 시작하고 완료할 때마다 추적하고, 모든 활동을 webhook으로 실시간 전송합니다.
+Track when AI starts and completes tasks, with real-time webhook notifications for all activities.
 
-## 🚀 기능
+## 🚀 Features
 
-- **`task-started`** - 작업 시작시 호출하는 도구
-- **`auto-task-tracker`** - 장시간 실행되는 작업 자동 추적
-- **`task-completed`** - 작업 완료시 호출하는 도구
-- **Webhook 알림** - 모든 도구 호출을 webhook으로 실시간 전송
-- **환경변수 설정** - 동적 webhook URL 관리
+- **`task-started`** - Tool to call when starting any task
+- **`auto-task-tracker`** - Automatic tracking for long-running tasks
+- **`task-completed`** - Tool to call when completing any task
+- **Webhook Notifications** - Real-time webhook delivery for all tool calls
+- **Environment Variable Configuration** - Dynamic webhook URL management
 
-## 📦 설치
+## 📦 Installation
 
 ```bash
-# 전역 설치
+# Global installation
 npm install -g agentify-mcp
 
-# 또는 npx로 실행
+# Or run with npx
 npx agentify-mcp
 ```
 
-## ⚙️ Webhook 설정
+## ⚙️ Webhook Configuration
 
-### 1. Webhook.site 사용 (추천)
+### 1. Using Webhook.site (Recommended)
 
-1. [webhook.site](https://webhook.site) 방문
-2. 자동 생성된 고유 URL 복사
-3. 아래 방법 중 하나로 설정
+1. Visit [webhook.site](https://webhook.site)
+2. Copy the auto-generated unique URL
+3. Set it up using one of the methods below
 
-### 2. 환경변수로 설정
+### 2. Environment Variable Setup
 
 ```bash
 export AGENTIFY_WEBHOOK_URL="https://webhook.site/your-unique-id"
-# 또는
+# or
 export WEBHOOK_URL="https://webhook.site/your-unique-id"
 
 agentify-mcp
 ```
 
-### 3. MCP 설정에서 환경변수 주입
+### 3. Environment Variable Injection in MCP Configuration
 
-Claude Desktop의 `claude_desktop_config.json`:
+Claude Desktop's `claude_desktop_config.json`:
 
 ```json
 {
@@ -62,51 +62,51 @@ Claude Desktop의 `claude_desktop_config.json`:
 }
 ```
 
-### 4. 설정 파일 위치
+### 4. Configuration File Locations
 
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
 - **Linux**: `~/.config/Claude/claude_desktop_config.json`
 
-## 🔧 사용법
+## 🔧 Usage
 
-### AI 도구 호출 예제
+### AI Tool Call Examples
 
-AI가 자동으로 다음과 같이 도구를 호출합니다:
+AI will automatically call tools like this:
 
 ```javascript
-// 작업 시작할 때
+// When starting a task
 task_started({
-  taskDescription: 'React 컴포넌트 리팩토링 시작',
+  taskDescription: 'Starting React component refactoring',
 });
 
-// 작업 완료할 때
+// When completing a task
 task_completed({
-  taskDescription: 'React 컴포넌트 리팩토링 완료',
+  taskDescription: 'Completed React component refactoring',
   outcome: 'success',
-  details: '성능 20% 향상',
+  details: '20% performance improvement',
 });
 ```
 
-### 실행 상태 확인
+### Runtime Status Check
 
-서버 시작시 다음과 같은 상태를 확인할 수 있습니다:
+When the server starts, you can see the status:
 
 ```
 🚀 Agentify MCP Server
-📋 Webhook: ✅ Enabled      # URL이 설정된 경우
+📋 Webhook: ✅ Enabled      # When URL is configured
 📝 Log Level: info
 ```
 
-또는:
+Or:
 
 ```
-📋 Webhook: ❌ Disabled     # URL이 설정되지 않은 경우
+📋 Webhook: ❌ Disabled     # When URL is not configured
 ```
 
-## 📡 Webhook 페이로드
+## 📡 Webhook Payload
 
-모든 도구 호출시 다음 형태로 webhook이 전송됩니다:
+All tool calls send webhooks in this format:
 
 ```json
 {
@@ -114,7 +114,7 @@ task_completed({
   "event": "tool_called",
   "toolName": "task-started",
   "arguments": {
-    "taskDescription": "React 컴포넌트 리팩토링 시작"
+    "taskDescription": "Starting React component refactoring"
   }
 }
 ```
@@ -125,7 +125,7 @@ task_completed({
   "event": "tool_completed",
   "toolName": "task-completed",
   "arguments": {
-    "taskDescription": "React 컴포넌트 리팩토링 완료",
+    "taskDescription": "Completed React component refactoring",
     "outcome": "success"
   },
   "result": {
@@ -135,9 +135,9 @@ task_completed({
 }
 ```
 
-## 🛠️ 개발자용 설정
+## 🛠️ Developer Configuration
 
-### 프로그래밍 방식으로 설정
+### Programmatic Setup
 
 ```typescript
 import { AgentifyMCPServer } from 'agentify-mcp';
@@ -150,84 +150,149 @@ const server = new AgentifyMCPServer({
 await server.start();
 ```
 
-### 런타임 동적 설정
+### Runtime Dynamic Configuration
 
 ```typescript
 const server = new AgentifyMCPServer();
 
-// 나중에 webhook URL 설정
+// Set webhook URL later
 server.setWebhookUrl('https://webhook.site/your-unique-id');
 
-// webhook 상태 확인
+// Check webhook status
 console.log(server.isWebhookEnabled()); // true/false
 ```
 
-### 로컬 개발
+### Local Development
 
 ```bash
 git clone https://github.com/agentify/agentify-mcp.git
 cd agentify-mcp
 npm install
 
-# 개발 모드 실행
+# Run in development mode
 npm run dev
 
-# 빌드
+# Build
 npm run build
+
+# Run tests
+npm test
+
+# Type checking
+npm run typecheck
+
+# Linting
+npm run lint
 ```
 
-## 🔍 문제해결
+## 🔍 Troubleshooting
 
-### Webhook이 작동하지 않는 경우
+### Webhook Not Working
 
-1. **환경변수 확인**
+1. **Check Environment Variables**
 
    ```bash
    echo $AGENTIFY_WEBHOOK_URL
    ```
 
-2. **Claude Desktop 재시작**
-   - 환경변수 변경 후 Claude Desktop 완전 재시작
+2. **Restart Claude Desktop**
+   - Completely restart Claude Desktop after environment variable changes
 
-3. **Webhook.site에서 테스트**
-   - 실시간으로 요청이 오는지 확인
+3. **Test with Webhook.site**
+   - Check if requests are received in real-time
 
-### MCP 연결 문제
+### MCP Connection Issues
 
-1. **설정 파일 경로 확인**
-2. **JSON 문법 오류 확인**
-3. **명령어 경로 확인** (`agentify-mcp` 또는 `npx agentify-mcp`)
+1. **Check configuration file path**
+2. **Verify JSON syntax**
+3. **Confirm command path** (`agentify-mcp` or `npx agentify-mcp`)
 
-## 🛡️ 보안
+## 🛡️ Security
 
-- Webhook URL은 로그에서 마스킹됩니다
-- 환경변수로 민감한 정보를 안전하게 관리
-- 런타임에 URL 변경 가능
+- Webhook URLs are masked in logs
+- Secure management of sensitive information via environment variables
+- Runtime URL changes supported
 
-## 🌟 사용 예제
+## 🌟 Usage Examples
 
-### 기본 실행
+### Basic Execution
 
 ```bash
-# webhook 없이 실행
+# Run without webhook
 agentify-mcp
 
-# webhook와 함께 실행
+# Run with webhook
 AGENTIFY_WEBHOOK_URL="https://webhook.site/abc123" agentify-mcp
 ```
 
-### Claude Desktop과 함께 사용
+### Using with Claude Desktop
 
-1. Webhook.site에서 URL 생성
-2. `claude_desktop_config.json`에 설정 추가
-3. Claude Desktop 재시작
-4. AI가 작업할 때마다 실시간 알림 수신
+1. Generate URL from Webhook.site
+2. Add configuration to `claude_desktop_config.json`
+3. Restart Claude Desktop
+4. Receive real-time notifications whenever AI performs tasks
 
-## 📄 라이센스
+## 🧪 Testing
 
-MIT License - 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
+```bash
+# Run all tests
+npm test
 
-## 🔗 링크
+# Run tests in watch mode
+npm run test:watch
+
+# Generate coverage report
+npm run test:coverage
+```
+
+## 📈 API Reference
+
+### AgentifyMCPServer
+
+#### Constructor Options
+
+```typescript
+interface ServerConfig {
+  webhookUrl?: string;
+  logLevel?: 'debug' | 'info' | 'warn' | 'error';
+}
+```
+
+#### Methods
+
+- `start(): Promise<void>` - Start the MCP server
+- `stop(): Promise<void>` - Stop the MCP server
+- `setWebhookUrl(url: string): void` - Set or update webhook URL
+- `getWebhookUrl(): string | undefined` - Get current webhook URL status
+- `isWebhookEnabled(): boolean` - Check if webhook is enabled
+
+### Available Tools
+
+#### task-started
+
+- **Description**: Call when starting any task or work
+- **Parameters**:
+  - `taskDescription` (string): Brief description of what was started
+
+#### auto-task-tracker
+
+- **Description**: Automatically monitors long-running task progress
+- **Parameters**:
+  - `taskThresholdSeconds` (number, optional): Auto-trigger threshold in seconds (default: 30)
+
+#### task-completed
+
+- **Description**: Call when finishing any task or work
+- **Parameters**:
+  - `taskDescription` (string): Brief description of what was completed
+  - `outcome` ('success' | 'partial' | 'failed'): Task completion outcome
+  - `details` (string, optional): Additional completion details
+
+## 📄 License
+
+MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🔗 Links
 
 - [GitHub Repository](https://github.com/agentify/agentify-mcp)
 - [npm Package](https://www.npmjs.com/package/agentify-mcp)

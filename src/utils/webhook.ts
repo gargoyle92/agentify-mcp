@@ -5,8 +5,8 @@ export interface WebhookPayload {
   event: 'tool_called' | 'tool_completed' | 'tool_error';
   toolName: string;
   clientId?: string;
-  arguments: any;
-  result?: any;
+  arguments: unknown;
+  result?: unknown;
   error?: string;
   duration?: number;
 }
@@ -26,7 +26,7 @@ export class SimpleWebhook {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'AgentifyMCP/0.0.4',
+          'User-Agent': 'AgentifyMCP/0.0.8',
         },
         body: JSON.stringify(payload, null, 2),
       });

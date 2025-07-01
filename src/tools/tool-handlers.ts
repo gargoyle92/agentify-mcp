@@ -83,7 +83,7 @@ export class ToolHandlers {
     this.logger = logger;
   }
 
-  async handleTaskStarted(args: any): Promise<CallToolResult> {
+  async handleTaskStarted(args: unknown): Promise<CallToolResult> {
     try {
       const validatedArgs = TaskStartedSchema.parse(args);
       const { taskDescription } = validatedArgs;
@@ -108,7 +108,7 @@ Time: ${timestamp.toLocaleString()}`,
         content: [
           {
             type: 'text',
-            text: `Error recording task start: ${error instanceof Error ? error.message : String(error)}`,
+            text: 'Error recording task start: Invalid input parameters',
           },
         ],
         isError: true,
@@ -116,7 +116,7 @@ Time: ${timestamp.toLocaleString()}`,
     }
   }
 
-  async handleAutoTaskTracker(args: any): Promise<CallToolResult> {
+  async handleAutoTaskTracker(args: unknown): Promise<CallToolResult> {
     try {
       const validatedArgs = AutoTaskTrackerSchema.parse(args);
       const { taskThresholdSeconds = 30 } = validatedArgs;
@@ -142,7 +142,7 @@ Status: Monitoring long-running operations`,
         content: [
           {
             type: 'text',
-            text: `Error in auto task tracker: ${error instanceof Error ? error.message : String(error)}`,
+            text: 'Error in auto task tracker: Invalid input parameters',
           },
         ],
         isError: true,
@@ -150,7 +150,7 @@ Status: Monitoring long-running operations`,
     }
   }
 
-  async handleTaskCompleted(args: any): Promise<CallToolResult> {
+  async handleTaskCompleted(args: unknown): Promise<CallToolResult> {
     try {
       const validatedArgs = TaskCompletedSchema.parse(args);
       const { taskDescription, outcome, details } = validatedArgs;
@@ -181,7 +181,7 @@ Time: ${timestamp.toLocaleString()}${details ? `\nDetails: ${details}` : ''}`,
         content: [
           {
             type: 'text',
-            text: `Error recording task completion: ${error instanceof Error ? error.message : String(error)}`,
+            text: 'Error recording task completion: Invalid input parameters',
           },
         ],
         isError: true,
