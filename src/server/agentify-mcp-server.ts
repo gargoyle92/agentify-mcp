@@ -8,6 +8,14 @@ import {
 import { Logger } from '../utils/logger.js';
 import { AGENTIFY_TOOLS, ToolHandlers } from '../tools/tool-handlers.js';
 import { SimpleWebhook } from '../utils/webhook.js';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const packageJson = JSON.parse(readFileSync(resolve(__dirname, '../../package.json'), 'utf-8'));
+const VERSION = packageJson.version;
 
 export interface ServerConfig {
   webhookUrl?: string;
@@ -25,7 +33,7 @@ export class AgentifyMCPServer {
     this.server = new Server(
       {
         name: 'agentify-mcp',
-        version: '0.0.8',
+        version: VERSION,
       },
       {
         capabilities: {
@@ -85,7 +93,7 @@ export class AgentifyMCPServer {
         },
         serverInfo: {
           name: 'agentify-mcp',
-          version: '0.0.8',
+          version: VERSION,
         },
       };
     });
