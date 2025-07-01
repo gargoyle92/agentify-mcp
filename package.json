@@ -41,17 +41,17 @@
     "notifications"
   ],
   "author": {
-    "name": "Agentify Team",
-    "email": "team@agentify.dev"
+    "name": "gargoyle92",
+    "email": "hanjune.dev@gmail.com"
   },
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/agentify/agentify-mcp.git"
+    "url": "https://github.com/gargoyle92/agentify-mcp.git"
   },
-  "homepage": "https://github.com/agentify/agentify-mcp#readme",
+  "homepage": "https://github.com/gargoyle92/agentify-mcp#readme",
   "bugs": {
-    "url": "https://github.com/agentify/agentify-mcp/issues"
+    "url": "https://github.com/gargoyle92/agentify-mcp/issues"
   },
   "publishConfig": {
     "access": "public",
